@@ -1,12 +1,14 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { auth, db, isFirebaseSupported } from '../firebase';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
   updateProfile,
-  onAuthStateChanged
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import {
   collection,
@@ -87,6 +89,11 @@ export const NotesProvider = ({ children }) => {
   
   // Current active note in editor
   const [currentNoteId, setCurrentNoteId] = useState(null);
+  const currentNoteIdRef = useRef(null);
+
+  useEffect(() => {
+    currentNoteIdRef.current = currentNoteId;
+  }, [currentNoteId]);
 
   // Search and Sort
   const [searchQuery, setSearchQuery] = useState('');
@@ -155,7 +162,7 @@ export const NotesProvider = ({ children }) => {
         setNotes(fetchedNotes);
         
         // Auto select first note if nothing is selected yet
-        if (fetchedNotes.length > 0 && !currentNoteId) {
+        if (fetchedNotes.length > 0 && !currentNoteIdRef.current) {
           const activeNotes = fetchedNotes.filter(n => !n.isTrash && !n.isArchived);
           if (activeNotes.length > 0) {
             setCurrentNoteId(activeNotes[0].id);
@@ -236,6 +243,34 @@ export const NotesProvider = ({ children }) => {
     setAuthMode('offline');
   };
 
+  const loginWithGoogle = async () => {
+    if (!isFirebaseSupported) return;
+
+    const originalWindowOpen = window.open;
+    const width = 500;
+    const height = 650;
+
+    const screenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
+    const screenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
+    const outerWidth = window.outerWidth !== undefined ? window.outerWidth : document.documentElement.clientWidth;
+    const outerHeight = window.outerHeight !== undefined ? window.outerHeight : document.documentElement.clientHeight;
+
+    const left = screenLeft + (outerWidth - width) / 2;
+    const top = screenTop + (outerHeight - height) / 2;
+
+    window.open = function (url, target, _features) {
+      const customFeatures = `width=${width},height=${height},top=${top},left=${left},status=no,resizable=yes,scrollbars=yes`;
+      return originalWindowOpen.call(window, url, target, customFeatures);
+    };
+
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } finally {
+      window.open = originalWindowOpen;
+    }
+  };
+
   const logout = async () => {
     if (authMode === 'firebase') {
       await signOut(auth);
@@ -285,13 +320,14 @@ export const NotesProvider = ({ children }) => {
   };
 
   // Update note details
-  const updateNote = async (id, fields) => {
+  const updateNote = async (id, fields, updateTimestamp = true) => {
     if (authMode === 'firebase' && user) {
       try {
-        await updateDoc(doc(db, 'notes', id), {
-          ...fields,
-          updatedAt: new Date().toISOString()
-        });
+        const updateData = { ...fields };
+        if (updateTimestamp) {
+          updateData.updatedAt = new Date().toISOString();
+        }
+        await updateDoc(doc(db, 'notes', id), updateData);
       } catch (e) {
         console.error('Error updating note in Firestore:', e);
       }
@@ -302,7 +338,7 @@ export const NotesProvider = ({ children }) => {
             ? {
                 ...note,
                 ...fields,
-                updatedAt: new Date().toISOString()
+                ...(updateTimestamp ? { updatedAt: new Date().toISOString() } : {})
               }
             : note
         )
@@ -589,6 +625,7 @@ export const NotesProvider = ({ children }) => {
         login,
         register,
         loginOffline,
+        loginWithGoogle,
         logout,
         isFirebaseSupported
       }}

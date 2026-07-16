@@ -273,3 +273,16 @@
   margin-bottom: 20px;
   text-align: left;
 }
+
+.btnGoogle {
+  border: 1.5px solid var(--border-color);
+  color: var(--text-primary);
+  background-color: var(--input-bg);
+  margin-top: 8px;
+}
+
+.btnGoogle:hover {
+  background-color: var(--hover-bg);
+  border-color: var(--text-muted);
+}
+

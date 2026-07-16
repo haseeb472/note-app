@@ -53,7 +53,55 @@ const NoteEditor = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentNoteId]);
 
-  // Debounced auto-save effect
+  // Refs to keep track of latest state for cleanup effect
+  const latestTitle = useRef(title);
+  const latestContent = useRef(content);
+  const latestColor = useRef(noteColor);
+  const initialTitle = useRef('');
+  const initialContent = useRef('');
+  const initialColor = useRef('default');
+
+  useEffect(() => {
+    latestTitle.current = title;
+  }, [title]);
+
+  useEffect(() => {
+    latestContent.current = content;
+  }, [content]);
+
+  useEffect(() => {
+    latestColor.current = noteColor;
+  }, [noteColor]);
+
+  useEffect(() => {
+    if (note) {
+      initialTitle.current = note.title || '';
+      initialContent.current = note.content || '';
+      initialColor.current = note.color || 'default';
+    }
+  }, [currentNoteId, note]);
+
+  // Final save with timestamp update on navigation away/active note change
+  useEffect(() => {
+    const activeId = currentNoteId;
+    return () => {
+      if (!activeId) return;
+
+      const titleChanged = latestTitle.current !== initialTitle.current;
+      const contentChanged = latestContent.current !== initialContent.current;
+      const colorChanged = latestColor.current !== initialColor.current;
+
+      if (titleChanged || contentChanged || colorChanged) {
+        updateNote(activeId, {
+          title: latestTitle.current,
+          content: latestContent.current,
+          color: latestColor.current
+        }, true);
+      }
+    };
+  }, [currentNoteId, updateNote]);
+
+  // Debounced auto-save effect (saves content without updating updatedAt timestamp to prevent jumping in list)
   useEffect(() => {
     if (!note) return;
     
@@ -71,7 +119,7 @@ const NoteEditor = () => {
         title,
         content,
         color: noteColor
-      });
+      }, false);
       setSavingStatus('saved');
       
       // Clear saved indicator after 2 seconds
